@@ -45,23 +45,42 @@ FORWARD rules between the segments.
 
 ## mDNS names in unicast DNS
 
-Avahi is not a DNS server and dnsmasq cannot speak mDNS, but the reflector
-host already holds every name it has seen. With `avahi_hosts_file_enabled`
-a timer dumps that cache into a hosts(5) file every minute:
+Avahi is not a DNS server and dnsmasq cannot speak mDNS, so the usual
+answers to "my Android phone / container / script cannot resolve
+`foo.local`" are a second mDNS stack or a full RFC 8766 discovery proxy.
+Neither is needed: the reflector host already holds every name it has seen.
+With `avahi_hosts_file_enabled` a timer dumps that cache into a hosts(5)
+file every minute, atomically and only when something changed:
 
 ```
 100.88.88.41    Sonos-38420BF76138.local sonos-38420bf76138.mdns.example.net
 ```
 
-Pi-hole 6 reads everything in `/etc/pihole/hosts/` and notices changes by
-itself; for dnsmasq point `addn-hosts=` at the file and set
-`avahi_hosts_file_reload_command`. Entries disappear with the device.
+hosts(5) is the one format every resolver reads, so the same file works
+unchanged with most of them:
 
-This helps clients without an mDNS resolver (Android, containers, scripts).
-Clients that do mDNS themselves never ask DNS for `.local`, and
-systemd-resolved refuses to; hence the extra zone in
-`avahi_hosts_file_domains`, which works everywhere. It is name resolution
-only, not service discovery (that would be an RFC 8766 discovery proxy).
+| Resolver | Hook it up | Picks up changes |
+|---|---|---|
+| Pi-hole 6 | drop the file into `/etc/pihole/hosts/` (the default path) | by itself |
+| dnsmasq | `addn-hosts=/path/avahi.list` | `avahi_hosts_file_reload_command: systemctl reload dnsmasq` |
+| CoreDNS | `hosts /path/avahi.list { reload 30s }` | by itself |
+| Knot Resolver | `hints.add_hosts('/path/avahi.list')` | on reload |
+| Blocky, AdGuard Home, systemd-resolved | hosts file sources | by itself |
+| Unbound | no hosts(5) input; needs `local-data:` lines | not covered yet |
+
+Entries disappear with the device. Only hosts whose records pass
+`avahi_reflect_filters` are in the cache, so a device that advertises
+nothing on the allowed list will not show up either.
+
+The extra zone in `avahi_hosts_file_domains` is for clients that refuse to
+send `.local` to DNS at all: systemd-resolved answers it locally with
+NXDOMAIN, and Apple, Windows and most Linux desktops resolve `.local`
+themselves via multicast and never ask. Android, containers and plain
+`getaddrinfo()` on servers do ask, and get an answer.
+
+This is name resolution only, not service discovery: a Chromecast app will
+not find the Chromecast through DNS, but `curl http://chromecast.mdns.example.net:8008`
+works from any segment.
 
 ## Variables
 
