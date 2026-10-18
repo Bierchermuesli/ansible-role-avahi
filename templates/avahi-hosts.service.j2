@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Publish avahi's mDNS cache as {{ avahi_hosts_file_path }}
+After=avahi-daemon.service
+Requisite=avahi-daemon.service
+
+[Service]
+Type=oneshot
+Nice=10
+TimeoutStartSec=90s
+ExecStart=/usr/local/bin/avahi-hosts{% for z in avahi_hosts_file_domains %} -d {{ z }}{% endfor %}{% if not avahi_hosts_file_ipv6 %} -4{% endif %}{% if avahi_hosts_file_reload_command %} -r '{{ avahi_hosts_file_reload_command }}'{% endif %} {{ avahi_hosts_file_path }}

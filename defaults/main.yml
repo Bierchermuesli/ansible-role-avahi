@@ -42,3 +42,21 @@ avahi_cache_entries_max: 4096
 # link unless networkd/NM enables it, but pin it off so a later network
 # stack change can't start a second responder on 5353.
 avahi_resolved_disable_mdns: true
+
+# ── mDNS names into unicast DNS ─────────────────────────────────────────────
+# Dump avahi's cache (every host it has resolved on the allowed interfaces)
+# into a hosts(5) file for a local DNS server. Pi-hole 6 reads everything in
+# /etc/pihole/hosts/ and picks up changes by itself; dnsmasq takes the file
+# via addn-hosts=. Clients without an mDNS resolver (Android, containers,
+# scripts) then resolve `foo.local` through plain DNS.
+avahi_hosts_file_enabled: false
+avahi_hosts_file_path: /etc/pihole/hosts/avahi.list
+# Every host is also listed under these zones, e.g. mdns.example.net gives
+# `sonos-abc.mdns.example.net`. Needed for clients that refuse to send
+# `.local` to DNS at all (systemd-resolved answers it locally with NXDOMAIN).
+avahi_hosts_file_domains: []
+avahi_hosts_file_ipv6: true
+avahi_hosts_file_interval: 1min
+# Run after the file changed, for DNS servers that do not watch it
+# (e.g. "pihole reloaddns" on Pi-hole 5, "systemctl reload dnsmasq").
+avahi_hosts_file_reload_command: ""

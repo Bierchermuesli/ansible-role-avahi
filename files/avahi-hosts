@@ -1,0 +1,77 @@
+#!/bin/bash
+# Managed by Ansible (roles/avahi). Do not edit on the host.
+#
+#   avahi-hosts [-d zone]... [-4] [-r reload-command] <outfile|->
+#
+# Writes avahi's current cache as a hosts(5) file: one line per address with
+# the mDNS name and, per -d zone, an alias <host>.<zone>. Entries come and go
+# with the devices, so the file is regenerated from scratch each run and
+# only replaced when it actually changed (atomic mktemp+mv), to spare the
+# DNS server a reload for nothing.
+set -u
+
+zones=(); v6=1; reload=""
+while getopts "d:4r:" opt; do
+    case $opt in
+        d) zones+=("$OPTARG") ;;
+        4) v6=0 ;;
+        r) reload=$OPTARG ;;
+        *) exit 2 ;;
+    esac
+done
+shift $((OPTIND - 1))
+out=${1:?usage: avahi-hosts [-d zone]... [-4] [-r reload-command] <outfile|->}
+
+# -a all types, -r resolve, -t terminate when the cache has been dumped,
+# -p parsable, -k raw service types. Resolved lines:
+#   =;iface;proto;name;type;domain;host;address;port;txt
+browse=$(timeout 45 avahi-browse -artpk 2>/dev/null) || exit 1
+
+body=$(printf '%s\n' "$browse" | awk -F';' -v v6="$v6" -v zones="${zones[*]:-}" '
+    # avahi escapes bytes outside [a-zA-Z0-9-] as \NNN decimal
+    function unesc(s,   out, c) {
+        out = ""
+        while (match(s, /\\([0-9][0-9][0-9]|.)/)) {
+            out = out substr(s, 1, RSTART - 1)
+            c = substr(s, RSTART + 1, RLENGTH - 1)
+            out = out (length(c) == 3 ? sprintf("%c", c + 0) : c)
+            s = substr(s, RSTART + RLENGTH)
+        }
+        return out s
+    }
+    BEGIN { nz = split(zones, z, " ") }
+    $1 == "=" && $8 != "" {
+        if (!v6 && index($8, ":")) next
+        host = unesc($7); addr = $8
+        # hosts(5) names: no spaces, no quotes; skip anything avahi could not
+        # map onto a sane label
+        if (host !~ /^[A-Za-z0-9._-]+\.local$/) next
+        key = addr " " host
+        if (seen[key]++) next
+        line = addr "\t" host
+        base = tolower(substr(host, 1, length(host) - 6))
+        for (i = 1; i <= nz; i++) line = line " " base "." z[i]
+        print line
+    }' | sort -u)
+
+content=$(printf '# avahi-hosts: mDNS cache of %s, regenerated every run. Do not edit.\n%s\n' "$(hostname -f)" "$body")
+
+if [ "$out" = "-" ]; then
+    printf '%s\n' "$content"
+    exit 0
+fi
+
+if [ -f "$out" ] && [ "$(cat "$out")" = "$content" ]; then
+    exit 0
+fi
+dir=$(dirname "$out")
+tmp=$(mktemp -p "$dir" ".$(basename "$out").XXXXXX") || exit 1
+trap 'rm -f "$tmp"' EXIT INT TERM
+printf '%s\n' "$content" > "$tmp"
+chmod 0644 "$tmp"
+mv "$tmp" "$out"
+trap - EXIT
+echo "changed: $(printf '%s\n' "$body" | grep -c .) entries"
+# for DNS servers that do not watch the file
+[ -n "$reload" ] && exec sh -c "$reload"
+exit 0

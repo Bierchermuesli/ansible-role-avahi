@@ -7,3 +7,5 @@
       vars:
         avahi_enabled: true
         avahi_allow_interfaces: [eth0, eth1]
+        avahi_hosts_file_enabled: true
+        avahi_hosts_file_domains: [mdns.example.net]

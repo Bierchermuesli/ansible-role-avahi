@@ -74,3 +74,59 @@
         name: avahi-daemon.service
         enabled: true
         state: started
+
+    - name: Hosts file from the mDNS cache
+      when: avahi_hosts_file_enabled | bool
+      block:
+        - name: Install avahi-hosts
+          ansible.builtin.copy:
+            src: avahi-hosts
+            dest: /usr/local/bin/avahi-hosts
+            mode: "0755"
+
+        - name: Install avahi-hosts units
+          ansible.builtin.template:
+            src: "avahi-hosts.{{ item }}.j2"
+            dest: "/etc/systemd/system/avahi-hosts.{{ item }}"
+            mode: "0644"
+          loop: [service, timer]
+          notify: Restart avahi-hosts timer
+
+        - name: Enable avahi-hosts timer
+          ansible.builtin.systemd:
+            name: avahi-hosts.timer
+            enabled: true
+            state: started
+            daemon_reload: true
+          when: not ansible_check_mode
+
+        # So the file exists right after the play, not after the first tick.
+        - name: Run avahi-hosts once
+          ansible.builtin.systemd:
+            name: avahi-hosts.service
+            state: started
+          changed_when: false
+          when: not ansible_check_mode
+
+    - name: Remove hosts file publishing when disabled
+      when: not (avahi_hosts_file_enabled | bool)
+      block:
+        - name: Stop avahi-hosts timer
+          ansible.builtin.systemd:
+            name: avahi-hosts.timer
+            enabled: false
+            state: stopped
+          failed_when: false
+          when: not ansible_check_mode
+
+        # A leftover list would keep answering with stale addresses forever.
+        - name: Remove avahi-hosts units, script and list
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - /etc/systemd/system/avahi-hosts.timer
+            - /etc/systemd/system/avahi-hosts.service
+            - /usr/local/bin/avahi-hosts
+            - "{{ avahi_hosts_file_path }}"
+          notify: Reload systemd

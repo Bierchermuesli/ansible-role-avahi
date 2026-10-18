@@ -43,6 +43,26 @@ Reflection only carries discovery. The actual connections (Chromecast
 8008/8009, AirPlay 7000/7100 plus RTP, HomeKit high ports) still need
 FORWARD rules between the segments.
 
+## mDNS names in unicast DNS
+
+Avahi is not a DNS server and dnsmasq cannot speak mDNS, but the reflector
+host already holds every name it has seen. With `avahi_hosts_file_enabled`
+a timer dumps that cache into a hosts(5) file every minute:
+
+```
+100.88.88.41    Sonos-38420BF76138.local sonos-38420bf76138.mdns.example.net
+```
+
+Pi-hole 6 reads everything in `/etc/pihole/hosts/` and notices changes by
+itself; for dnsmasq point `addn-hosts=` at the file and set
+`avahi_hosts_file_reload_command`. Entries disappear with the device.
+
+This helps clients without an mDNS resolver (Android, containers, scripts).
+Clients that do mDNS themselves never ask DNS for `.local`, and
+systemd-resolved refuses to; hence the extra zone in
+`avahi_hosts_file_domains`, which works everywhere. It is name resolution
+only, not service discovery (that would be an RFC 8766 discovery proxy).
+
 ## Variables
 
 | Variable | Default | |
@@ -57,6 +77,12 @@ FORWARD rules between the segments.
 | `avahi_use_ipv4`, `avahi_use_ipv6` | `true` | |
 | `avahi_cache_entries_max` | `4096` | |
 | `avahi_resolved_disable_mdns` | `true` | drop-in with `MulticastDNS=no` for systemd-resolved |
+| `avahi_hosts_file_enabled` | `false` | publish the mDNS cache as a hosts file |
+| `avahi_hosts_file_path` | `/etc/pihole/hosts/avahi.list` | |
+| `avahi_hosts_file_domains` | `[]` | extra zones to alias every host under |
+| `avahi_hosts_file_ipv6` | `true` | include AAAA |
+| `avahi_hosts_file_interval` | `1min` | |
+| `avahi_hosts_file_reload_command` | `""` | run after a change, for servers that do not watch the file |
 
 ## Notes
 
