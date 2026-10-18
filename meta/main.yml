@@ -1,0 +1,23 @@
+---
+galaxy_info:
+  author: Bierchermuesli
+  namespace: bierchermuesli
+  role_name: avahi
+  description: avahi-daemon as a filtered mDNS reflector between network segments.
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - networking
+    - mdns
+    - avahi
+    - router
+
+dependencies: []

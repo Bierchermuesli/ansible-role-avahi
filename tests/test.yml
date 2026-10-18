@@ -1,0 +1,9 @@
+---
+- name: Test avahi role
+  hosts: localhost
+  become: true
+  roles:
+    - role: avahi
+      vars:
+        avahi_enabled: true
+        avahi_allow_interfaces: [eth0, eth1]

@@ -1,0 +1,10 @@
+---
+- name: Restart avahi
+  ansible.builtin.systemd:
+    name: avahi-daemon.service
+    state: restarted
+
+- name: Restart systemd-resolved
+  ansible.builtin.systemd:
+    name: systemd-resolved.service
+    state: restarted

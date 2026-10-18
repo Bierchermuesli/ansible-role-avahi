@@ -1,0 +1,44 @@
+---
+# mDNS reflector. Avahi runs as a pure reflector on a multi-homed host and
+# repeats mDNS between the listed segments so clients in one VLAN discover
+# AirPlay/Chromecast/HomeKit/printers in another. Nothing is published about
+# the host itself, and nothing can be registered via D-Bus.
+#
+# Role no-ops unless explicitly enabled.
+avahi_enabled: false
+
+# Interfaces avahi binds to. The reflector repeats between exactly these, so
+# leave out WAN, DMZ and anything attacker-reachable: reflected records leak
+# hostnames and service types of every device in the other segments.
+# Mandatory when avahi_reflector is true - with an empty list avahi would
+# bind to every interface.
+avahi_allow_interfaces: []
+# Belt and braces: explicitly denied even if someone later empties the
+# allow list. allow-interfaces takes precedence when both are set.
+avahi_deny_interfaces: []
+
+avahi_use_ipv4: true
+avahi_use_ipv6: true
+
+avahi_reflector: true
+
+# Service types to reflect. Empty = reflect everything (including _ssh,
+# _smb, _workstation and the hostname of every box). Matching is a substring
+# match on PTR/SRV/TXT records; A/AAAA host records are always reflected so
+# name resolution keeps working. Avahi >= 0.8.
+avahi_reflect_filters: []
+
+# Reflect between IPv4 and IPv6 (translate v4 mDNS to v6 and back). Off by
+# default; only needed when a segment is single-stack.
+avahi_reflect_ipv: false
+
+# Publish host records (hostname.local, addresses, workstation). Off for a
+# reflector: the router has no business advertising itself into IoT.
+avahi_publish: false
+
+avahi_cache_entries_max: 4096
+
+# systemd-resolved has its own mDNS stack on the same port. It is off per
+# link unless networkd/NM enables it, but pin it off so a later network
+# stack change can't start a second responder on 5353.
+avahi_resolved_disable_mdns: true

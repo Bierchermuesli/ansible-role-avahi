@@ -1,0 +1,43 @@
+# {{ ansible_managed }}
+# Pure mDNS reflector, see roles/avahi.
+
+[server]
+{% if avahi_allow_interfaces %}
+allow-interfaces={{ avahi_allow_interfaces | join(',') }}
+{% endif %}
+{% if avahi_deny_interfaces %}
+deny-interfaces={{ avahi_deny_interfaces | join(',') }}
+{% endif %}
+use-ipv4={{ 'yes' if avahi_use_ipv4 else 'no' }}
+use-ipv6={{ 'yes' if avahi_use_ipv6 else 'no' }}
+use-iff-running=no
+allow-point-to-point=no
+ratelimit-interval-usec=1000000
+ratelimit-burst=1000
+cache-entries-max={{ avahi_cache_entries_max }}
+
+[wide-area]
+enable-wide-area=no
+
+[publish]
+disable-publishing={{ 'no' if avahi_publish else 'yes' }}
+disable-user-service-publishing={{ 'no' if avahi_publish else 'yes' }}
+publish-hinfo=no
+publish-workstation=no
+publish-addresses={{ 'yes' if avahi_publish else 'no' }}
+publish-domain={{ 'yes' if avahi_publish else 'no' }}
+
+[reflector]
+enable-reflector={{ 'yes' if avahi_reflector else 'no' }}
+reflect-ipv={{ 'yes' if avahi_reflect_ipv else 'no' }}
+{% if avahi_reflect_filters %}
+reflect-filters={{ avahi_reflect_filters | join(',') }}
+{% endif %}
+
+[rlimits]
+rlimit-core=0
+rlimit-data=8388608
+rlimit-fsize=0
+rlimit-nofile=768
+rlimit-stack=8388608
+rlimit-nproc=3

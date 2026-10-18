@@ -1,0 +1,76 @@
+---
+- name: Avahi
+  when: avahi_enabled | bool
+  block:
+    - name: Refuse to run a reflector on every interface
+      ansible.builtin.assert:
+        that:
+          - not avahi_reflector or (avahi_allow_interfaces | length > 0)
+        fail_msg: "avahi_reflector=true needs avahi_allow_interfaces - otherwise avahi reflects on WAN too"
+
+    # Config goes in before the package: Debian's postinst starts the daemon
+    # immediately, and with the stock config that means four seconds of
+    # avahi bound to every interface, WAN included. dpkg keeps the existing
+    # file (force-confold) so the first start already uses our config.
+    - name: Ensure /etc/avahi
+      ansible.builtin.file:
+        path: /etc/avahi
+        state: directory
+        mode: "0755"
+
+    - name: Render /etc/avahi/avahi-daemon.conf
+      ansible.builtin.template:
+        src: avahi-daemon.conf.j2
+        dest: /etc/avahi/avahi-daemon.conf
+        mode: "0644"
+      notify: Restart avahi
+
+    # libnss-mdns is only a Recommends but would rewrite nsswitch.conf to
+    # resolve *.local on the router itself. Not wanted.
+    - name: Install avahi
+      ansible.builtin.apt:
+        name:
+          - avahi-daemon
+          - avahi-utils
+        state: present
+        install_recommends: false
+        update_cache: true
+        cache_valid_time: 3600
+      register: _avahi_pkg
+
+    - name: Detect systemd-resolved
+      ansible.builtin.command: systemctl is-active systemd-resolved  # noqa: command-instead-of-module
+      register: _avahi_resolved
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Keep systemd-resolved off port 5353
+      when:
+        - avahi_resolved_disable_mdns | bool
+        - _avahi_resolved.stdout == "active"
+      block:
+        - name: Ensure resolved drop-in dir
+          ansible.builtin.file:
+            path: /etc/systemd/resolved.conf.d
+            state: directory
+            mode: "0755"
+
+        - name: Disable resolved mDNS
+          ansible.builtin.copy:
+            dest: /etc/systemd/resolved.conf.d/20-avahi-no-mdns.conf
+            mode: "0644"
+            content: |
+              # Managed by roles/avahi. avahi-daemon owns mDNS on this host.
+              [Resolve]
+              MulticastDNS=no
+          notify: Restart systemd-resolved
+
+    # In check mode the package is not really installed, so the unit does
+    # not exist yet - skip instead of failing the dry run.
+    - name: Enable and start avahi
+      when: not (ansible_check_mode and _avahi_pkg is changed)
+      ansible.builtin.systemd:
+        name: avahi-daemon.service
+        enabled: true
+        state: started
